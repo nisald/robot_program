@@ -23,7 +23,8 @@
 #define SERV        10 // SERVo motor 1 (SERVo; adafruit) signal pin
 #define MOTORSPEED 100 // normal motor speed. (full speed is too much)
 #define OBSTACLE_THRESHOLD 5.0  // minimum distance to an obstacle
-#define QUARTER_STEER_DELAY 450  // time to turn one quarter (90-degree) in MOTORSPEED
+#define QUARTER_STEER_DELAY 450  // time to turn one quarter (90-degree) 
+                                 // in MOTORSPEED (above value is a guess) 
 
 /* globals */
 AF_DCMotor mtleft(1);     // motor left is connected to M1
