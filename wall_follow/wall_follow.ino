@@ -11,7 +11,7 @@
 #define SENSE_FRONT_FAR                     5.0      // inches; (*NOTE*) take a sharp left at this point
 #define SENSE_FRONT_CLOSE                   2.0      // inches
 #define SENSE_SIDE_FAR       11.0 - ROBOT_WIDTH      // inches; no wall if more than this
-#define SENSE_SIDE_CLOSE    ((SENSE_FAR) / 2.0)      // inches; too close if less than this
+#define SENSE_SIDE_CLOSE    ((SENSE_SIDE_FAR) / 2.0)      // inches; too close if less than this
 
 /* drive motor slots */
 #define MOTOR_DRIVE_LEFT  1
@@ -23,8 +23,8 @@
 
 /* Ultrasonic sensor digital pins */
 #define PING_FRONT_ECHO 2
-#define PING_RIGHT_ECHO 9
-#define PING_LEFT_ECHO 10
+#define PING_LEFT_ECHO 9
+#define PING_RIGHT_ECHO 10
 #define PING_COMM_TRIG 13
 
 /* calculate the distance in inches for the time |D| */
@@ -32,13 +32,16 @@
 
 /* steering maneuvars */
 typedef enum {
-    FRONT, // both motors run forward at the same speed, but no monitoring
-    REVERSE, // same as front, but motors run backwards
+    UP, // both motors run forward at the same speed, but no monitoring
+    DOWN, // same as front, but motors run backwards
     LEFT, // left motor runs in half of right motors speed
     RIGHT, // same as LEFT, this time right motor is slowed
     HARD_LEFT, // sharp left turning, left motor is released
-    HARD_RIGHT // sharp right turning, right motor is released  
-} dir_t;
+    HARD_RIGHT, // sharp right turning, right motor is released
+    // UP_LEFT, UP_RIGHT,
+    // DOWN_LEFT, DOWN_RIGHT
+    NULLMOV
+} move_t;
 
 /* state of the sensor reading */
 typedef enum {
@@ -46,16 +49,25 @@ typedef enum {
     CLEAR, // no wall in front of the sensor
     TOUCH, // sensing a wall at an optimal distant
     DANGER // wall is too close
-} sensestate_t;
+} state_t;
 
 typedef struct senses {
     double fwalldist;
     double lwalldist;
     double rwalldist;
-    sensestate_t fstate;
-    sensestate_t lstate;
-    sensestate_t rstate;
+    state_t fstate;
+    state_t lstate;
+    state_t rstate;
 } senses_t;
+
+/*
+ *  left hand or right hand
+ *  |hand| indicates which sensor should be used
+ *  to detect wall and turns.
+ */
+typedef enum {
+   LEFT_HAND, RIGHT_HAND
+} hand_t;
 
 /* define driving motors */
 AF_DCMotor leftmt(MOTOR_DRIVE_LEFT);
@@ -65,16 +77,8 @@ AF_DCMotor rightmt(MOTOR_DRIVE_RIGHT);
 AF_DCMotor basemt(MOTOR_HAND_BASE);
 AF_DCMotor grabmt(MOTOR_HAND_GRAB);
 
-/* 
- *  left hand or right hand 
- *  |touchsensor| indicates which sensor should be used
- *  to detect wall and turns.
- */
-typedef enum {
-   LEFT_SENSOR, RIGHT_SENSOR
-} touch_t;
-
-touch_t touchsensor = RIGHT_SENSOR; // default to RIGHT sensor
+hand_t hand = RIGHT_HAND; // use right hand rule, default
+move_t drive = NULLMOV; // current driving state
 
 senses_t sensors = {
     0.0,
@@ -85,28 +89,62 @@ senses_t sensors = {
     INIT
 };
 
+state_t frontreach = INIT; // state of the front reaching
+state_t sidereach = INIT; // state of the side reaching
+double frontdist = 0.0; // front distant to the wall
+double sidedist = 0.0; // side distant to the wall
+
 void setup()
 {
     Serial.begin(9600);
+    siri_init();
 }
 
 void loop()
-{}
+{
+    // Sense the world
+    // take a move
 
-void siri_init() 
+    siri_sense(&sensors);
+
+    frontreach = sensors.fstate;
+    sidereach = (hand == RIGHT_HAND) ? sensors.rstate : sensors.lstate;
+
+    if (frontreach == CLEAR) {
+        if (sidereach == CLEAR && drivestate != LEFT)
+            siri_move(LEFT);
+        else if (sidereach == TOUCH && drivestate != UP)
+            siri_move(UP);
+        else if (sidereach == DANGER && drivestate != UP_LEFT)
+            siri_move(UP_LEFT);
+        else
+            siri_move(NULLMOV);
+    } 
+    
+    
+#ifdef DEBUG
+    Serial.print("UltraSonic readings:: ");
+    Serial.print("Front: "); Serial.print(sensors.fwalldist); Serial.print("\t");
+    Serial.print("Left: "); Serial.print(sensors.lwalldist); Serial.print("\t");
+    Serial.print("Right: "); Serial.print(sensors.rwalldist); Serial.println("\t");
+#endif
+}
+
+void siri_init()
 {
     pinMode(PING_FRONT_ECHO, INPUT);
     pinMode(PING_LEFT_ECHO, INPUT);
     pinMode(PING_RIGHT_ECHO, INPUT);
     pinMode(PING_COMM_TRIG, OUTPUT);
 
-    int istouchon = analogRead(A0);
+    int ishandswitchon = analogRead(A0);
 
-    if (istouchon) touchsensor = LEFT_SENSOR;
-    else touchsensor = RIGHT_SENSOR;
+    // on the hand switch to choose LEFT_HAND rule
+    if (ishandswtichon) 
+        hand = LEFT_HAND;
 }
 
-void siri_sense(senses_t *sensors) 
+void siri_sense(senses_t *sensors)
 {
     sensors->fwalldist = siri_readsonic(PING_FRONT_ECHO, PING_COMM_TRIG);
     sensors->lwalldist = siri_readsonic(PING_LEFT_ECHO, PING_COMM_TRIG);
@@ -134,16 +172,16 @@ void siri_sense(senses_t *sensors)
         sensors->lstate = TOUCH;
 }
 
-/* read the ultrasonic input */ 
+/* read the ultrasonic input */
 double siri_readsonic(byte echo, byte trig)
 {
-    digitalWrite(echo, LOW); // write an initial LOW for a clean trigger
+    digitalWrite(trig, LOW); // write an initial LOW for a clean trigger
     delayMicroseconds(2);
-    digitalWrite(echo, HIGH); // write the high pulse
-    delayMicroseconds(5);
-    digitalWrite(echo, LOW); // end the high pulse
+    digitalWrite(trig, HIGH); // write the high pulse
+    delayMicroseconds(10);
+    digitalWrite(trig, LOW); // end the high pulse
 
-    long dtime = pulseIn(trig, HIGH);
+    long dtime = pulseIn(echo, HIGH);
 
     return calcInches(dtime);
 }
