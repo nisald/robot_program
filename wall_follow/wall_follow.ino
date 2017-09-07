@@ -1,5 +1,7 @@
 #include <AFMotor.h>
 
+#define DEBUG
+
 /* Robot info */
 #define ROBOT_WIDTH  6.0  // inches
 #define ROBOT_LENGTH 7.0  // inches
@@ -106,7 +108,7 @@ void loop()
     // take a move
 
     siri_sense(&sensors);
-
+#ifndef DEBUG
     frontreach = sensors.fstate;
     sidereach = (hand == RIGHT_HAND) ? sensors.rstate : sensors.lstate;
 
@@ -120,7 +122,7 @@ void loop()
         else
             siri_move(NULLMOV);
     } 
-    
+#endif
     
 #ifdef DEBUG
     Serial.print("UltraSonic readings:: ");
@@ -140,8 +142,8 @@ void siri_init()
     int ishandswitchon = analogRead(A0);
 
     // on the hand switch to choose LEFT_HAND rule
-    if (ishandswtichon) 
-        hand = LEFT_HAND;
+//    if (ishandswtichon) 
+//        hand = LEFT_HAND;
 }
 
 void siri_sense(senses_t *sensors)
